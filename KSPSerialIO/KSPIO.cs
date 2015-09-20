@@ -84,8 +84,8 @@ namespace KSPSerialIO
     public struct ControlPacket
     {
         public byte id;
-        public byte MainControls;                  //SAS RCS Lights Gear Brakes Precision Abort Stage 
-        public byte Mode;                          //0 = stage, 1 = docking, 2 = map
+        public byte MainControls;                  //SAS    RCS    Lights    Gear    Brakes    Precision    Abort    Stage 
+        public byte Mode;                          // 0      0       0        0    Precision   Map-view     MODE     MODE      MODE - 0 = stage, 1 = docking, 2 = map
         public ushort ControlGroup;                //control groups 1-10 in 2 bytes
         public byte AdditionalControlByte1;        //other stuff
         public byte AdditionalControlByte2;
