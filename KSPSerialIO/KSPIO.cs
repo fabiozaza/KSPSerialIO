@@ -13,6 +13,49 @@ using KSP.IO;
 
 namespace KSPSerialIO
 {
+#if DEBUG
+    //This will kick us into the save called default and set the first vessel active
+    [KSPAddon(KSPAddon.Startup.MainMenu, false)]
+    public class Debug_AutoLoadPersistentSaveOnStartup : MonoBehaviour
+    {
+        //use this variable for first run to avoid the issue with when this is true and multiple addons use it
+        public static bool first = true;
+        public void Start()
+        {
+            //only do it on the first entry to the menu
+            if (first)
+            {
+                first = false;
+                HighLogic.SaveFolder = "default";
+                Game game = GamePersistence.LoadGame("persistent", HighLogic.SaveFolder, true, false);
+
+                if (game != null && game.flightState != null && game.compatible)
+                {
+                    Int32 FirstVessel;
+                    Boolean blnFoundVessel = false;
+                    for (FirstVessel = 0; FirstVessel < game.flightState.protoVessels.Count; FirstVessel++)
+                    {
+                        if (game.flightState.protoVessels[FirstVessel].vesselType != VesselType.SpaceObject &&
+                            game.flightState.protoVessels[FirstVessel].vesselType != VesselType.Unknown)
+                        {
+                            ////////////////////////////////////////////////////
+                            //PUT ANY OTHER LOGIC YOU WANT IN HERE//
+                            ////////////////////////////////////////////////////
+                            blnFoundVessel = true;
+                            break;
+                        }
+                    }
+                    if (!blnFoundVessel)
+                        FirstVessel = 0;
+                    FlightDriver.StartAndFocusVessel(game, FirstVessel);
+                }
+
+                //CheatOptions.InfiniteFuel = true;
+            }
+        }
+    }
+#endif
+    
     #region Structs
     [StructLayout(LayoutKind.Sequential, Pack = 1)]
     public struct VesselData
@@ -110,7 +153,7 @@ namespace KSPSerialIO
         public Boolean Precision;
         public Boolean Abort;
         public Boolean Stage;
-        public int Mode;
+        public byte Mode;
         public Boolean[] ControlGroup;
         public float Pitch;
         public float Roll;
@@ -603,6 +646,8 @@ namespace KSPSerialIO
             VControls.Throttle = (float)CPacket.Throttle / 1000.0F;
             VControls.WheelThrottle = (float)CPacket.WheelThrottle / 1000.0F;
 
+            VControls.Mode = CPacket.Mode;
+
             for (int j = 1; j <= 10; j++)
             {
                 VControls.ControlGroup[j] = BitMathUshort(CPacket.ControlGroup, j);
@@ -660,7 +705,6 @@ namespace KSPSerialIO
         private double missionTime = 0;
         private double missionTimeOld = 0;
         private double theTime = 0;
-
         public double refreshrate = 1.0f;
         public static Vessel ActiveVessel;
         public Guid VesselIDOld;
@@ -1065,6 +1109,63 @@ namespace KSPSerialIO
                     {
                         ActiveVessel.ActionGroups.SetGroup(KSPActionGroup.Custom10, KSPSerialPort.VControls.ControlGroup[10]);
                         KSPSerialPort.VControlsOld.ControlGroup[10] = KSPSerialPort.VControls.ControlGroup[10];
+                    }
+
+                    //========= Mode =========
+                    if (KSPSerialPort.VControls.Mode != KSPSerialPort.VControlsOld.Mode)
+                    {
+                        // Mode byte bit allocation
+                        // 0      0       0        0    Precision   Map-view     MODE     MODE      
+                        
+                        //MODE - 0 = stage, 1 = docking, 2 = map
+                        switch (KSPSerialPort.VControls.Mode & 0x03)
+                        {
+                            case 0:
+                                
+                                MapView.ExitMapView();
+                                ScreenMessages.PostScreenMessage("Stage mode");
+                                break;
+                            case 1:
+                                ScreenMessages.PostScreenMessage("Docking Mode");
+                                break;
+                            case 2:
+                                if (MapView.MapIsEnabled)
+                                {
+                                    MapView.EnterMapView();
+                                    ScreenMessages.PostScreenMessage("Map Mode");
+                                }
+                                break;
+                        }
+
+                        // Might not be needed as it will be catered for in the Mode selection
+                        //===== Map View =====
+                        /*if (BitMathByte(KSPSerialPort.VControls.Mode, 2))
+                        {
+                            MapView.EnterMapView();
+                            ScreenMessages.PostScreenMessage("Entered MapView");
+                        }
+                        else
+                        {
+                            MapView.ExitMapView();
+                            ScreenMessages.PostScreenMessage("Exit MapView");
+                        }*/
+                        //===== Precision ======
+                        if (BitMathByte(KSPSerialPort.VControls.Mode,3))
+                        {
+                            
+                          
+
+                            ScreenMessages.PostScreenMessage("precisionMode TRUE");
+                        }
+                        else
+                        {
+                            FlightInputHandler fih = FlightInputHandler.fetch;
+                            fih.precisionMode = true;
+                            ScreenMessages.PostScreenMessage("precisionMode FALSE");
+                        }
+
+
+                        KSPSerialPort.VControls.Mode = KSPSerialPort.VControlsOld.Mode;
                     }
 
                     KSPSerialPort.ControlReceived = false;
@@ -1554,5 +1655,11 @@ namespace KSPSerialIO
 
             ActiveVessel.OnFlyByWire -= new FlightInputCallback(AxisInput);
         }
+
+        private Boolean BitMathByte(byte x, int n)
+        {
+            return ((x >> n) & 1) == 1;
+        }
+
     }
 }
